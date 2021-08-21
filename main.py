@@ -1,5 +1,6 @@
 from selenium import webdriver
 from selenium.webdriver.support.ui import Select
+import selenium
 import time
 import re
 
@@ -34,6 +35,8 @@ class SearchResult:
         print('#####################################')
         print('-----------> ' + self.search_str)
         print('#####################################')
+        if not self.dist_list:
+            print("NOT FOUND")
         for dist in self.dist_list:
             print('////////////////////////////////')
             dist.print_info()
@@ -102,13 +105,12 @@ class Searcher:
 
             status_img = self._driver.find_element_by_id(status_img_indexed(i))
             img_path = status_img.get_attribute('src')
-            color = re.search('Green|Red|Yellow', img_path).group(0)
+            color = re.search('Green|Red|Yellow|no_shipping', img_path).group(0)
 
             to_add = Distributor(company, mfr, country, cage, color)
             distributor_list.append(to_add)
 
         return distributor_list
-
 
     def get_part_count(self):
         pcount_str = self._driver.find_element_by_id("Lu_man_lblCnt")
@@ -119,22 +121,37 @@ class Searcher:
 
     def build_search_result(self, to_search):
         self.search(to_search)
-        self.select_first_search_result()
+        try:
+            self.select_first_search_result()
+        except selenium.common.exceptions.NoSuchElementException:
+            return SearchResult([], to_search)
+
         self.select_firt_govt_designation()
         res_list = self.loop_in_results()
         return SearchResult(res_list, to_search)
 
 
 def main():
-    s = Searcher(Cst.search_uri)
-    s.search("M39029/58-364")
-    #s.search("MS27488-16-2")
-    #s.search("MS3320-20")
-    s.select_first_search_result()
-    s.select_firt_govt_designation()
-    s.loop_in_results()
 
-    time.sleep(80)
+    to_search_list = [
+        #"MS90335-3",
+        #"M12883/51-003",
+        #"MS27718-26-1",
+        #"MS90311-711",
+        #"M39029/58-364",
+        #"MS27488-16-2",
+        #"MS3320-20",
+        "M83536/6-022M",
+        "MS24523-22",
+        "M12883/51-002"
+    ]
+
+    reslist = []
+    for str_s in to_search_list:
+        s = Searcher(Cst.search_uri)
+        res = s.build_search_result(str_s)
+        reslist.append(res)
+        res.pretty_print()
 
 
 
