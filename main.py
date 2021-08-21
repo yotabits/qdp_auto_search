@@ -1,25 +1,47 @@
 from selenium import webdriver
 from selenium.webdriver.support.ui import Select
 import time
-# #import pandas as pd
+import re
 
-# url = "http://gts.co.jefferson.co.us/index.aspx"
-# # create a new Firefox session
-# driver = webdriver.Chrome(executable_path='/home/tkostas/Downloads/chromedriver')
-# driver.implicitly_wait(2)
-# driver.get(url)
-# driver.
-# accept_button = driver.find_element_by_id("ctl00_ContentPlaceHolder1_btnAcceptTerms")
-# accept_button.click(
 
 class Cst:
     search_uri = 'https://qpldocs.dla.mil/search/'
+    manufacturer_per_page = 5
 
+
+class Distributor:
+    def __init__(self, name, mfr_designation, country, cage, color):
+        self.name = name
+        self.mfr_designation = mfr_designation
+        self.country = country
+        self.cage = cage
+        self.color = color
+
+    def print_info(self):
+        print("Mfr designation: " + self.mfr_designation)
+        print("Name: " + self.name)
+        print("Country: " + self.country)
+        print("Cage: " + self.cage)
+        print("Color: " + self.color)
+
+
+class SearchResult:
+    def __init__(self, distributor_list, search):
+        self.dist_list = distributor_list
+        self.search_str = search
+
+    def pretty_print(self):
+        print('#####################################')
+        print('-----------> ' + self.search_str)
+        print('#####################################')
+        for dist in self.dist_list:
+            print('////////////////////////////////')
+            dist.print_info()
 
 class Searcher:
     def __init__(self, target_uri):
-        self._driver = webdriver.Chrome(executable_path='/home/tkostas/Downloads/chromedriver')
-        self._driver.implicitly_wait(1)
+        self._driver = webdriver.Chrome(executable_path='/home/tkostas/chromedriver')
+        self._driver.implicitly_wait(3)
         self._driver.get(target_uri)
 
     def set_search_type(self):
@@ -33,10 +55,74 @@ class Searcher:
         search_btn = self._driver.find_element_by_id("Search_panel1_btn")
         search_btn.click()
         self._driver.implicitly_wait(2)
-        #tab = self._driver.find_element_by_id('search_list_DG')
 
+    def select_first_search_result(self):
         a = self._driver.find_element_by_xpath("//*[@id=\"search_list_DG\"]/tbody/tr[2]/td[1]/a")
         a.click()
+        self._driver.implicitly_wait(2)
+
+    def select_firt_govt_designation(self):
+        a = self._driver.find_element_by_xpath("//*[@id=\"Lu_gov_DG_ctl03_btnGovPartNo\"]")
+        a.click()
+        self._driver.implicitly_wait(2)
+
+    def loop_in_results(self):
+        distributor_list = []
+        part_count = self.get_part_count()
+        for i in range(0, int(part_count / Cst.manufacturer_per_page)):
+            distributor_list += self.get_one_page_content(Cst.manufacturer_per_page)
+            next_btn = self._driver.find_element_by_id("Lu_man_Datagrid_navigation1_btnNext")
+            next_btn.click()
+        distributor_list += self.get_one_page_content(part_count % Cst.manufacturer_per_page)
+
+        return distributor_list
+
+    def get_one_page_content(self, nb_lines):
+        distributor_list = []
+        start_index = 3
+        prefix = "Lu_man_DG_ctl0"
+        mfr_design_indexed = lambda index: prefix + str(index) +\
+                                           "_lblMfgPart"
+        company_indexed = lambda index: prefix + str(index) +\
+                                           "_lblCompany"
+        country_indexed = lambda index: prefix + str(index) +\
+                                           "_lblCountry"
+        cage_indexed = lambda index: prefix + str(index) +\
+                                           "_lblCAGECode"
+        status_img_indexed = lambda index: prefix + str(index) +\
+                                           "_imgCompanyStatus"
+
+        text_for_id = lambda id: self._driver.find_element_by_id(id).text
+
+        for i in range(start_index, start_index + nb_lines):
+            mfr = text_for_id(mfr_design_indexed(i))
+            company = text_for_id(company_indexed(i))
+            country = text_for_id(country_indexed(i))
+            cage = text_for_id(cage_indexed(i))
+
+            status_img = self._driver.find_element_by_id(status_img_indexed(i))
+            img_path = status_img.get_attribute('src')
+            color = re.search('Green|Red|Yellow', img_path).group(0)
+
+            to_add = Distributor(company, mfr, country, cage, color)
+            distributor_list.append(to_add)
+
+        return distributor_list
+
+
+    def get_part_count(self):
+        pcount_str = self._driver.find_element_by_id("Lu_man_lblCnt")
+        found = re.search("[0-9]+", pcount_str.text)
+        if found is not None:
+            print("Available manufacturers " + found.group(0))
+        return int(found.group(0))
+
+    def build_search_result(self, to_search):
+        self.search(to_search)
+        self.select_first_search_result()
+        self.select_firt_govt_designation()
+        res_list = self.loop_in_results()
+        return SearchResult(res_list, to_search)
 
 
 def main():
@@ -44,6 +130,10 @@ def main():
     s.search("M39029/58-364")
     #s.search("MS27488-16-2")
     #s.search("MS3320-20")
+    s.select_first_search_result()
+    s.select_firt_govt_designation()
+    s.loop_in_results()
+
     time.sleep(80)
 
 
